@@ -1,0 +1,1283 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>꼬망은행 ATM</title>
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { width: 100%; height: 100%; overflow: hidden; -webkit-text-size-adjust: 100%; }
+    body { font-family: 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif; background: #DBEAFE; color: #1f2937; }
+    img { max-width: 100%; height: auto; }
+    button { font-family: inherit; }
+    input { font-family: inherit; }
+    input[type=number] { -moz-appearance: textfield; }
+    input[type=number]::-webkit-outer-spin-button,
+    input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+    #root { height: 100%; }
+    .scrollY::-webkit-scrollbar { width: 6px; }
+    .scrollY::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.18); border-radius: 3px; }
+    .scrollY::-webkit-scrollbar-track { background: transparent; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    @keyframes pop { 0% { opacity:0; transform: scale(.7);} 80% { transform: scale(1.06);} 100% { opacity:1; transform: scale(1);} }
+    @keyframes pulse { 0%, 100% { transform: scale(1); opacity: 1;} 50% { transform: scale(1.06); opacity: 0.9;} }
+    @keyframes dotPulse { 0%, 100% { opacity:.25; transform: scale(.8);} 50% { opacity:1; transform: scale(1);} }
+    @keyframes slideUp { 0% { opacity:0; transform: translateY(20px);} 100% { opacity:1; transform: translateY(0);} }
+    @keyframes fade { 0% { opacity:0; } 100% { opacity:1; } }
+    @keyframes cardInsert { 0%, 100% { transform: translateX(-50%) translateY(-12px); } 50% { transform: translateX(-50%) translateY(28px); } }
+    @keyframes cardReturn { 0%, 100% { transform: translateX(-50%) translateY(28px); } 50% { transform: translateX(-50%) translateY(-12px); } }
+    @keyframes cashOut { 0% { transform: translate(-50%, 0); opacity: 0.5;} 50% { transform: translate(-50%, -10px); opacity: 1;} 100% { transform: translate(-50%, 0); opacity: 0.5;} }
+    @keyframes shakeX { 0%,100% { transform: translateX(0);} 25% { transform: translateX(-6px);} 75% { transform: translateX(6px);} }
+  </style>
+</head>
+<body>
+  <div id="root">
+    <div style="display:flex;align-items:center;justify-content:center;height:100vh;color:#3B82F6;font-size:18px;">
+      <div style="text-align:center;">
+        <div style="width:48px;height:48px;border:5px solid #DBEAFE;border-top-color:#3B82F6;border-radius:50%;animation:spin 1s linear infinite;margin:0 auto 16px;"></div>
+        <div>로딩 중...</div>
+      </div>
+    </div>
+  </div>
+  <script type="text/babel" data-presets="react" data-type="module">
+const { useState, useEffect, useRef } = React;
+
+// ─── 테마 6색 ───
+const PALETTE = [
+  { label: "파랑",   value: "#3B82F6", dark: "#2563EB", bgFrom: "#EFF6FF", bgTo: "#BFDBFE" },
+  { label: "하늘",   value: "#0EA5E9", dark: "#0284C7", bgFrom: "#E0F2FE", bgTo: "#BAE6FD" },
+  { label: "초록",   value: "#10B981", dark: "#059669", bgFrom: "#ECFDF5", bgTo: "#A7F3D0" },
+  { label: "주황",   value: "#F97316", dark: "#EA580C", bgFrom: "#FFF7ED", bgTo: "#FED7AA" },
+  { label: "분홍",   value: "#EC4899", dark: "#DB2777", bgFrom: "#FDF2F8", bgTo: "#FBCFE8" },
+  { label: "보라",   value: "#8B5CF6", dark: "#7C3AED", bgFrom: "#F5F3FF", bgTo: "#DDD6FE" },
+];
+const themeOf = v => PALETTE.find(p => p.value === v) || PALETTE[0];
+const bgOf = t => `linear-gradient(160deg, ${t.bgFrom} 0%, ${t.bgTo} 100%)`;
+
+const DEFAULT_SETTINGS = {
+  storeName: "꼬망은행 ATM",
+  themeColor: "#3B82F6",
+};
+
+const fmtMoney = n => (n || 0).toLocaleString("ko-KR") + "원";
+
+const isStandaloneMode = () => {
+  try {
+    return (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches) ||
+           window.navigator.standalone === true;
+  } catch (e) { return false; }
+};
+const toggleFullscreen = () => {
+  if (isStandaloneMode()) { alert("이미 전체화면(앱) 모드로 실행 중이에요."); return; }
+  const fsEl = document.fullscreenElement || document.webkitFullscreenElement;
+  if (!fsEl) {
+    const el = document.documentElement;
+    const req = el.requestFullscreen || el.webkitRequestFullscreen;
+    const fail = () => alert(
+      "이 브라우저는 전체화면을 직접 지원하지 않아요.\n\n" +
+      "iPhone Safari에서 사파리 UI까지 숨기시려면:\n" +
+      "1) 사파리 하단의 공유 버튼(□↑) 누르기\n" +
+      "2) '홈 화면에 추가' 선택\n" +
+      "3) 홈 화면에 생긴 아이콘으로 다시 열기"
+    );
+    if (req) { try { const p = req.call(el); if (p && typeof p.catch === "function") p.catch(fail); } catch (e) { fail(); } }
+    else { fail(); }
+  } else {
+    const exit = document.exitFullscreen || document.webkitExitFullscreen;
+    if (exit) { try { exit.call(document); } catch (e) {} }
+  }
+};
+
+// ─── SVG 시각 컴포넌트 (카페/빙수 SmartPay 스타일) ───
+function InsertVisual({ direction = "down", color }) {
+  // direction: "down" = 투입, "up" = 반환 — 카드와 통장이 동시에 함께 움직임
+  const returning = direction === "up";
+  const darkColor = (themeOf(color) || { dark: color }).dark;
+  return (
+    <svg viewBox="0 0 380 340" style={{ width: "min(78vw, 420px)", height: "auto", display: "block", margin: "0 auto" }} aria-hidden="true">
+      <defs>
+        <style>{`
+          @keyframes atmItemsBob {
+            0%, 100% { transform: translateY(0); }
+            50%      { transform: translateY(${returning ? "-18px" : "18px"}); }
+          }
+          @keyframes atmSlotPulse { 0%, 100% { opacity: 0.35; } 50% { opacity: 1; } }
+          @keyframes atmArrowMove {
+            0%, 100% { opacity: 0.35; transform: translateY(0); }
+            50%      { opacity: 0.95; transform: translateY(${returning ? "-6px" : "6px"}); }
+          }
+          @keyframes atmTopRay {
+            0%   { opacity: 0;   transform: scaleY(0.5); }
+            50%  { opacity: 1;   transform: scaleY(1); }
+            100% { opacity: 0;   transform: scaleY(0.5); }
+          }
+          .atm-items     { animation: atmItemsBob 1.8s ease-in-out infinite; transform-origin: center; }
+          .atm-slot-glow { animation: atmSlotPulse 1.4s ease-in-out infinite; }
+          .atm-arrow     { animation: atmArrowMove 1.2s ease-in-out infinite; transform-origin: center; }
+          .atm-ray       { animation: atmTopRay 1.6s ease-in-out infinite; transform-origin: center bottom; }
+        `}</style>
+      </defs>
+
+      {/* 카드 + 통장 (한 그룹 — 동시 움직임) */}
+      <g className="atm-items">
+        {/* 카드 */}
+        <g transform="translate(58 54)">
+          <rect x="0" y="0" width="112" height="70" rx="10" fill={color} stroke={darkColor} strokeWidth="1.5" />
+          <rect x="0" y="14" width="112" height="12" rx="0" fill="#0F172A" opacity="0.6" />
+          <rect x="10" y="38" width="28" height="20" rx="3" fill="#FBBF24" stroke="#D97706" strokeWidth="0.8" />
+          <line x1="10" y1="48" x2="38" y2="48" stroke="#D97706" strokeWidth="0.8" />
+          <line x1="24" y1="38" x2="24" y2="58" stroke="#D97706" strokeWidth="0.8" />
+          <rect x="44" y="40" width="60" height="3" rx="1" fill="white" opacity="0.6" />
+          <rect x="44" y="48" width="48" height="3" rx="1" fill="white" opacity="0.45" />
+          <text x="46" y="64" fontSize="7" fill="white" fontWeight="800" opacity="0.9" letterSpacing="2">•• CARD</text>
+        </g>
+
+        {/* 통장 */}
+        <g transform="translate(210 50)">
+          <rect x="0" y="0" width="112" height="78" rx="5" fill="#7F1D1D" />
+          <rect x="4" y="4" width="104" height="70" rx="3" fill="#DC2626" />
+          <rect x="8" y="8" width="96" height="3" rx="1" fill="#FCD34D" />
+          <text x="56" y="44" textAnchor="middle" fontSize="18" fill="white" fontWeight="900">통장</text>
+          <text x="56" y="60" textAnchor="middle" fontSize="9" fill="white" fontWeight="700" letterSpacing="1.2">꼬망은행</text>
+          <rect x="8" y="66" width="96" height="3" rx="1" fill="#FCD34D" />
+        </g>
+      </g>
+
+      {/* 방향 화살표 (펄스 이동) */}
+      <g transform={`translate(115 ${returning ? 42 : 168})`}>
+        <text x="0" y="0" textAnchor="middle" fontSize="26" fill={color} fontWeight="900" className="atm-arrow">{returning ? "↑" : "↓"}</text>
+      </g>
+      <g transform={`translate(267 ${returning ? 42 : 168})`}>
+        <text x="0" y="0" textAnchor="middle" fontSize="26" fill={color} fontWeight="900" className="atm-arrow">{returning ? "↑" : "↓"}</text>
+      </g>
+
+      {/* ATM 본체 (카페 SmartPay reader 스타일) */}
+      <g>
+        {/* 슬롯 상단 펄스 라이트 */}
+        <rect x="76" y="200" width="100" height="3" rx="1.5" fill={color} className="atm-ray" />
+        <rect x="204" y="200" width="100" height="3" rx="1.5" fill={color} className="atm-ray" />
+
+        {/* 본체 외곽 */}
+        <rect x="36" y="208" width="308" height="118" rx="16" fill="#1F2937" />
+        <rect x="44" y="216" width="292" height="96" rx="12" fill="#0F172A" />
+
+        {/* 카드 슬롯 */}
+        <rect x="76" y="230" width="100" height="16" rx="5" fill="#475569" />
+        <rect x="76" y="230" width="100" height="16" rx="5" fill={color} className="atm-slot-glow" />
+        <rect x="80" y="234" width="92" height="7" rx="3" fill="#0F172A" opacity="0.78" />
+        <text x="126" y="268" textAnchor="middle" fill="#94A3B8" fontSize="11" fontWeight="800" letterSpacing="0.5">카드 투입구</text>
+
+        {/* 통장 슬롯 */}
+        <rect x="204" y="230" width="100" height="16" rx="5" fill="#475569" />
+        <rect x="204" y="230" width="100" height="16" rx="5" fill={color} className="atm-slot-glow" />
+        <rect x="208" y="234" width="92" height="7" rx="3" fill="#0F172A" opacity="0.78" />
+        <text x="254" y="268" textAnchor="middle" fill="#94A3B8" fontSize="11" fontWeight="800" letterSpacing="0.5">통장 투입구</text>
+
+        {/* 바닥 디테일 */}
+        <text x="190" y="298" textAnchor="middle" fill="#475569" fontSize="11" fontWeight="700" letterSpacing="2">꼬망은행 ATM</text>
+        <circle cx="318" cy="297" r="3.5" fill="#10B981" opacity="0.85" />
+      </g>
+    </svg>
+  );
+}
+
+function CashVisual({ direction = "out" }) {
+  // direction: "out" = 출금(나옴), "in" = 입금(들어감) — 지폐들이 함께 동시 움직임
+  const isOut = direction === "out";
+  return (
+    <svg viewBox="0 0 320 300" style={{ width: "min(80vw, 400px)", height: "auto", display: "block", margin: "0 auto" }} aria-hidden="true">
+      <defs>
+        <style>{`
+          @keyframes cashBillsBob {
+            0%, 100% { transform: translateY(0); }
+            50%      { transform: translateY(${isOut ? "-18px" : "18px"}); }
+          }
+          @keyframes cashSlotPulse { 0%, 100% { opacity: 0.35; } 50% { opacity: 1; } }
+          @keyframes cashArrowMove {
+            0%, 100% { opacity: 0.35; transform: translateY(0); }
+            50%      { opacity: 0.95; transform: translateY(${isOut ? "-6px" : "6px"}); }
+          }
+          @keyframes cashTopRay {
+            0%   { opacity: 0;   transform: scaleY(0.5); }
+            50%  { opacity: 1;   transform: scaleY(1); }
+            100% { opacity: 0;   transform: scaleY(0.5); }
+          }
+          .cash-bills    { animation: cashBillsBob 1.8s ease-in-out infinite; transform-origin: center; }
+          .cash-slot     { animation: cashSlotPulse 1.4s ease-in-out infinite; }
+          .cash-arrow    { animation: cashArrowMove 1.2s ease-in-out infinite; transform-origin: center; }
+          .cash-ray      { animation: cashTopRay 1.6s ease-in-out infinite; transform-origin: center bottom; }
+        `}</style>
+      </defs>
+
+      {/* 지폐 다발 (한 그룹 — 동시 움직임) */}
+      <g className="cash-bills">
+        {/* 뒷 지폐 (5천원) */}
+        <g opacity="0.75">
+          <rect x="62" y="44" width="146" height="70" rx="6" fill="#FEF3C7" stroke="#FBBF24" strokeWidth="1.5" />
+          <rect x="68" y="50" width="134" height="58" rx="3" fill="#FCD34D" opacity="0.3" />
+          <circle cx="135" cy="79" r="16" fill="#F59E0B" opacity="0.35" />
+          <text x="135" y="85" textAnchor="middle" fontSize="16" fill="#78350F" fontWeight="900">₩</text>
+          <line x1="70" y1="68" x2="96" y2="68" stroke="#D97706" strokeWidth="1.5" />
+          <line x1="70" y1="76" x2="92" y2="76" stroke="#D97706" strokeWidth="1.2" opacity="0.7" />
+          <line x1="176" y1="68" x2="202" y2="68" stroke="#D97706" strokeWidth="1.5" />
+          <line x1="180" y1="76" x2="202" y2="76" stroke="#D97706" strokeWidth="1.2" opacity="0.7" />
+          <text x="72" y="103" fontSize="7" fill="#78350F" fontWeight="800">5,000</text>
+          <text x="198" y="103" textAnchor="end" fontSize="7" fill="#78350F" fontWeight="800">꼬망은행</text>
+        </g>
+
+        {/* 앞 지폐 (1만원) */}
+        <g>
+          <rect x="76" y="40" width="158" height="76" rx="6" fill="#BBF7D0" stroke="#4ADE80" strokeWidth="1.6" />
+          <rect x="82" y="46" width="146" height="60" rx="3" fill="#86EFAC" opacity="0.4" />
+          <circle cx="155" cy="78" r="22" fill="#16A34A" opacity="0.32" />
+          <text x="155" y="86" textAnchor="middle" fontSize="22" fill="#14532D" fontWeight="900">₩</text>
+          <line x1="84" y1="64" x2="116" y2="64" stroke="#16A34A" strokeWidth="2.2" />
+          <line x1="84" y1="74" x2="112" y2="74" stroke="#16A34A" strokeWidth="1.6" opacity="0.7" />
+          <line x1="194" y1="64" x2="226" y2="64" stroke="#16A34A" strokeWidth="2.2" />
+          <line x1="198" y1="74" x2="226" y2="74" stroke="#16A34A" strokeWidth="1.6" opacity="0.7" />
+          <text x="88" y="108" fontSize="8" fill="#15803D" fontWeight="800">10,000</text>
+          <text x="222" y="108" textAnchor="end" fontSize="8" fill="#15803D" fontWeight="800">꼬망은행권</text>
+        </g>
+      </g>
+
+      {/* 방향 화살표 */}
+      <g transform={`translate(110 ${isOut ? 30 : 158})`}>
+        <text x="0" y="0" textAnchor="middle" fontSize="26" fill="#16A34A" fontWeight="900" className="cash-arrow">{isOut ? "↑" : "↓"}</text>
+      </g>
+      <g transform={`translate(200 ${isOut ? 30 : 158})`}>
+        <text x="0" y="0" textAnchor="middle" fontSize="26" fill="#16A34A" fontWeight="900" className="cash-arrow">{isOut ? "↑" : "↓"}</text>
+      </g>
+
+      {/* 현금 출입구 본체 (카페 SmartPay reader 스타일) */}
+      <g>
+        {/* 슬롯 상단 펄스 라이트 */}
+        <rect x="60" y="188" width="200" height="3" rx="1.5" fill="#16A34A" className="cash-ray" />
+
+        {/* 본체 외곽 */}
+        <rect x="20" y="196" width="280" height="86" rx="14" fill="#1F2937" />
+        <rect x="28" y="204" width="264" height="68" rx="11" fill="#0F172A" />
+
+        {/* 출입구 슬릿 */}
+        <rect x="58" y="218" width="204" height="18" rx="5" fill="#475569" />
+        <rect x="58" y="218" width="204" height="18" rx="5" fill="#16A34A" className="cash-slot" />
+        <rect x="62" y="223" width="196" height="8" rx="3" fill="#0F172A" opacity="0.8" />
+
+        {/* 라벨 */}
+        <text x="160" y="262" textAnchor="middle" fill="#94A3B8" fontSize="11" fontWeight="800" letterSpacing="1">
+          {isOut ? "현금 출구" : "현금 투입구"}
+        </text>
+      </g>
+    </svg>
+  );
+}
+
+// ─── 키패드 컴포넌트 ───
+function Keypad({ onDigit, onClear, onConfirm, allowConfirm, themeColor }) {
+  const btnBase = {
+    padding: "clamp(22px, 3.2vh, 34px) 8px",
+    fontSize: "clamp(28px, 4vw, 38px)",
+    fontWeight: 900,
+    borderRadius: 16,
+    cursor: "pointer",
+    border: "none",
+    transition: "transform .12s, background .12s"
+  };
+  const numStyle = { ...btnBase, background: "white", color: "#0f172a", border: "2px solid #e2e8f0", boxShadow: "0 4px 12px rgba(15,23,42,.06)" };
+  const clearStyle = { ...btnBase, background: "#FEE2E2", color: "#DC2626", border: "2px solid #FECACA" };
+  const confirmStyle = { ...btnBase, background: allowConfirm ? themeColor : "#cbd5e1", color: "white", boxShadow: allowConfirm ? `0 6px 16px ${themeColor}55` : "none" };
+  return (
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "clamp(8px, 1.4vw, 14px)", maxWidth: 460, margin: "0 auto", width: "100%" }}>
+      {[1,2,3,4,5,6,7,8,9].map(d => (
+        <button key={d} onClick={() => onDigit(d)} style={numStyle}
+          onMouseDown={e => e.currentTarget.style.transform = "scale(.97)"}
+          onMouseUp={e => e.currentTarget.style.transform = "scale(1)"}
+          onMouseLeave={e => e.currentTarget.style.transform = "scale(1)"}
+        >{d}</button>
+      ))}
+      <button onClick={onClear} style={clearStyle}>지우기</button>
+      <button onClick={() => onDigit(0)} style={numStyle}
+        onMouseDown={e => e.currentTarget.style.transform = "scale(.97)"}
+        onMouseUp={e => e.currentTarget.style.transform = "scale(1)"}
+        onMouseLeave={e => e.currentTarget.style.transform = "scale(1)"}
+      >0</button>
+      <button onClick={onConfirm} disabled={!allowConfirm} style={confirmStyle}>확인</button>
+    </div>
+  );
+}
+
+function AtmKiosk() {
+  const [screen, setScreen]       = useState("main");
+  const [settings, setSettings]   = useState(DEFAULT_SETTINGS);
+  const [editSettings, setEditSettings] = useState(DEFAULT_SETTINGS);
+  const [students, setStudents]   = useState([]);
+  const [editStudents, setEditStudents] = useState([]);
+  const [settingsTab, setSettingsTab] = useState("general");
+  const [newStudent, setNewStudent] = useState({ name: "", password: "", balance: "" });
+  const [bulkBalance, setBulkBalance] = useState("");
+
+  // 트랜잭션 상태
+  const [transactionType, setTransactionType] = useState(""); // withdraw | deposit | transfer | inquiry
+  const [currentStudent, setCurrentStudent] = useState(null);
+  const [targetStudent, setTargetStudent] = useState(null);
+  const [passwordInput, setPasswordInput] = useState("");
+  const [amount, setAmount] = useState(0);
+  const [customAmount, setCustomAmount] = useState(""); // 직접 입력 (raw digits)
+  const [popup, setPopup] = useState(null); // { message, type, onClose? }
+
+  const timerRef = useRef(null);
+
+  const theme = themeOf(settings.themeColor);
+  const editTheme = themeOf(editSettings.themeColor);
+  const TH = theme.value;
+  const TH_DARK = theme.dark;
+  const BG = bgOf(theme);
+
+  useEffect(() => {
+    const link = document.createElement("link");
+    link.href = "https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700;800;900&display=swap";
+    link.rel = "stylesheet";
+    document.head.appendChild(link);
+    return () => { try { document.head.removeChild(link); } catch {} };
+  }, []);
+
+  // 설정 + 학생 데이터 로드
+  useEffect(() => {
+    try {
+      const s = localStorage.getItem("atm-settings");
+      if (s) {
+        const p = JSON.parse(s);
+        const merged = { ...DEFAULT_SETTINGS, ...p };
+        if (!PALETTE.some(t => t.value === merged.themeColor)) merged.themeColor = DEFAULT_SETTINGS.themeColor;
+        if (!merged.storeName || !merged.storeName.trim()) merged.storeName = DEFAULT_SETTINGS.storeName;
+        setSettings(merged);
+        setEditSettings(merged);
+      }
+    } catch {}
+    try {
+      const st = localStorage.getItem("atm-students");
+      if (st) {
+        const arr = JSON.parse(st);
+        if (Array.isArray(arr)) {
+          setStudents(arr);
+          setEditStudents(arr.map(s => ({ ...s })));
+        }
+      }
+    } catch {}
+  }, []);
+
+  useEffect(() => () => clearInterval(timerRef.current), []);
+
+  // 학생 데이터 저장 헬퍼
+  const persistStudents = (newStudents) => {
+    setStudents(newStudents);
+    try { localStorage.setItem("atm-students", JSON.stringify(newStudents)); } catch {}
+  };
+
+  // 자동 화면 전환
+  useEffect(() => {
+    if (timerRef.current) clearTimeout(timerRef.current);
+    if (screen === "card-insert") {
+      timerRef.current = setTimeout(() => {
+        if (transactionType === "transfer") setScreen("friend-select");
+        else setScreen("password");
+      }, 4000);
+    } else if (screen === "processing") {
+      timerRef.current = setTimeout(() => {
+        if (transactionType === "deposit") setScreen("take-card");
+        else if (transactionType === "withdraw") setScreen("take-card");
+        else if (transactionType === "transfer") setScreen("take-card");
+        else if (transactionType === "inquiry") setScreen("inquiry-result");
+      }, 2000);
+    } else if (screen === "deposit-cash") {
+      timerRef.current = setTimeout(() => setScreen("processing"), 4000);
+    } else if (screen === "take-card") {
+      timerRef.current = setTimeout(() => {
+        if (transactionType === "withdraw") setScreen("take-cash");
+        else setScreen("thanks");
+      }, 4000);
+    } else if (screen === "take-cash") {
+      timerRef.current = setTimeout(() => setScreen("thanks"), 4000);
+    } else if (screen === "thanks") {
+      timerRef.current = setTimeout(() => {
+        resetTransaction();
+        setScreen("main");
+      }, 3000);
+    }
+    return () => clearTimeout(timerRef.current);
+  }, [screen, transactionType]);
+
+  const resetTransaction = () => {
+    setTransactionType("");
+    setCurrentStudent(null);
+    setTargetStudent(null);
+    setPasswordInput("");
+    setAmount(0);
+    setCustomAmount("");
+  };
+
+  const openSettings = () => {
+    setEditSettings(JSON.parse(JSON.stringify(settings)));
+    setEditStudents(students.map(s => ({ ...s })));
+    setSettingsTab("general");
+    setNewStudent({ name: "", password: "", balance: "" });
+    setBulkBalance("");
+    setScreen("settings");
+  };
+
+  const saveSettings = () => {
+    if (!editSettings.storeName.trim()) { alert("은행 이름을 입력해 주세요."); return; }
+    // 학생 검증
+    for (const s of editStudents) {
+      if (!s.name || !s.name.trim()) { alert("이름이 비어있는 친구가 있어요."); return; }
+      if (!s.password || !/^\d{4}$/.test(s.password)) { alert(`'${s.name}'의 비밀번호는 4자리 숫자여야 해요.`); return; }
+      if (!Number.isFinite(s.balance) || s.balance < 0) { alert(`'${s.name}'의 잔고를 올바르게 입력해 주세요.`); return; }
+    }
+    setSettings(editSettings);
+    persistStudents(editStudents.map(s => ({ ...s })));
+    try { localStorage.setItem("atm-settings", JSON.stringify(editSettings)); } catch {}
+    setScreen("main");
+  };
+
+  const addStudent = () => {
+    const name = (newStudent.name || "").trim();
+    const pwd = (newStudent.password || "").trim();
+    const bal = parseInt(String(newStudent.balance).replace(/[^0-9]/g, ""), 10);
+    if (!name) { alert("이름을 입력해 주세요."); return; }
+    if (!/^\d{4}$/.test(pwd)) { alert("비밀번호는 숫자 4자리여야 해요."); return; }
+    if (!Number.isFinite(bal) || bal < 0) { alert("잔고를 올바르게 입력해 주세요."); return; }
+    setEditStudents(prev => [...prev, { name, password: pwd, balance: bal }]);
+    setNewStudent({ name: "", password: "", balance: "" });
+  };
+
+  const removeStudent = (idx) => setEditStudents(prev => prev.filter((_, i) => i !== idx));
+  const updateStudent = (idx, patch) => setEditStudents(prev => prev.map((s, i) => i === idx ? { ...s, ...patch } : s));
+
+  const applyBulkBalance = () => {
+    const n = parseInt(String(bulkBalance).replace(/[^0-9]/g, ""), 10);
+    if (!Number.isFinite(n) || n < 0) { alert("잔고를 올바르게 입력해 주세요."); return; }
+    setEditStudents(prev => prev.map(s => ({ ...s, balance: n })));
+  };
+
+  // 메인에서 액션 시작
+  const startTransaction = (type) => {
+    if (students.length === 0) {
+      setPopup({ message: "먼저 설정에서 친구(원아)를\n등록해 주세요", type: "info" });
+      return;
+    }
+    resetTransaction();
+    setTransactionType(type);
+    setScreen("card-insert");
+  };
+
+  // 비밀번호 입력
+  const onPwdDigit = (d) => {
+    if (passwordInput.length >= 4) return;
+    setPasswordInput(p => p + String(d));
+  };
+  const onPwdClear = () => setPasswordInput("");
+  const onPwdConfirm = () => {
+    if (passwordInput.length !== 4) return;
+    const found = students.find(s => s.password === passwordInput);
+    if (!found) {
+      setPopup({ message: "비밀번호가\n일치하지 않습니다", type: "error" });
+      setPasswordInput("");
+      return;
+    }
+    setCurrentStudent(found);
+    setPasswordInput("");
+    // 다음 단계 분기
+    if (transactionType === "inquiry") setScreen("processing");
+    else if (transactionType === "transfer") setScreen("confirm-amount");
+    else setScreen("amount-select");
+  };
+
+  // 금액 선택
+  const selectAmount = (n) => {
+    setAmount(n);
+    setScreen("confirm-amount");
+  };
+
+  // 직접 입력
+  const onAmountDigit = (d) => {
+    if (customAmount.length >= 7) return; // 최대 999만원
+    if (customAmount === "" && d === 0) return; // 첫 자리 0 방지
+    setCustomAmount(c => c + String(d));
+  };
+  const onAmountClear = () => setCustomAmount("");
+  const onAmountConfirm = () => {
+    const n = parseInt(customAmount || "0", 10);
+    if (!Number.isFinite(n) || n < 1000) { setPopup({ message: "1,000원 이상 입력해 주세요", type: "info" }); return; }
+    if (n % 1000 !== 0) { setPopup({ message: "천원 단위로 입력해 주세요\n(동전 단위는 불가)", type: "info" }); return; }
+    setAmount(n);
+    setCustomAmount("");
+    setScreen("confirm-amount");
+  };
+
+  // 금액 확인 → 처리
+  const confirmAndProceed = () => {
+    if (transactionType === "withdraw") {
+      if (currentStudent.balance < amount) {
+        setPopup({
+          message: `잔고가 부족해요\n현재 잔고: ${fmtMoney(currentStudent.balance)}`,
+          type: "error",
+          onClose: () => { setPopup(null); setScreen("amount-select"); }
+        });
+        return;
+      }
+      // 잔고 차감 + 저장
+      const newStudents = students.map(s => s.password === currentStudent.password ? { ...s, balance: s.balance - amount } : s);
+      persistStudents(newStudents);
+      setCurrentStudent(c => ({ ...c, balance: c.balance - amount }));
+      setScreen("processing");
+    } else if (transactionType === "deposit") {
+      setScreen("deposit-cash"); // 현금 투입 화면 먼저 → 자동 processing → 잔고 반영
+    } else if (transactionType === "transfer") {
+      // 송금: 비밀번호는 아직 입력 전 (transfer는 금액→비밀번호 순서)
+      if (currentStudent === null) {
+        // 비밀번호 입력 안 됐으면 비밀번호 화면으로
+        setScreen("password");
+        return;
+      }
+      if (currentStudent.password === targetStudent.password) {
+        setPopup({
+          message: "자기 자신에게는\n송금할 수 없어요",
+          type: "error",
+          onClose: () => { setPopup(null); setScreen("friend-select"); }
+        });
+        return;
+      }
+      if (currentStudent.balance < amount) {
+        setPopup({
+          message: `잔고가 부족해요\n현재 잔고: ${fmtMoney(currentStudent.balance)}`,
+          type: "error",
+          onClose: () => { setPopup(null); setScreen("amount-select"); }
+        });
+        return;
+      }
+      // 송금 처리
+      const newStudents = students.map(s => {
+        if (s.password === currentStudent.password) return { ...s, balance: s.balance - amount };
+        if (s.password === targetStudent.password) return { ...s, balance: s.balance + amount };
+        return s;
+      });
+      persistStudents(newStudents);
+      setCurrentStudent(c => ({ ...c, balance: c.balance - amount }));
+      setScreen("processing");
+    }
+  };
+
+  // 입금 현금 투입 끝나면 잔고 반영
+  useEffect(() => {
+    if (screen === "processing" && transactionType === "deposit" && currentStudent) {
+      // processing 진입 시점에 잔고 가산
+      const newStudents = students.map(s => s.password === currentStudent.password ? { ...s, balance: s.balance + amount } : s);
+      persistStudents(newStudents);
+      setCurrentStudent(c => ({ ...c, balance: c.balance + amount }));
+    }
+  }, [screen]);
+
+  const FULL = { height: "100%", display: "flex", flexDirection: "column", fontFamily: "'Noto Sans KR', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif" };
+
+  // ─── 커스텀 팝업 (얼럿 대체) ───
+  const PopupOverlay = () => {
+    if (!popup) return null;
+    const handleClose = () => {
+      if (popup.onClose) popup.onClose();
+      else setPopup(null);
+    };
+    const isError = popup.type === "error";
+    return (
+      <div onClick={handleClose} style={{
+        position: "fixed", inset: 0, background: "rgba(15,23,42,0.55)", zIndex: 1000,
+        display: "flex", alignItems: "center", justifyContent: "center", padding: 20,
+        animation: "fade .15s ease both"
+      }}>
+        <div onClick={e => e.stopPropagation()} style={{
+          background: "white", borderRadius: 24, width: "100%", maxWidth: 380,
+          boxShadow: "0 24px 60px rgba(0,0,0,0.32)",
+          animation: "pop .25s cubic-bezier(0.34, 1.56, 0.64, 1) both",
+          padding: "32px 28px 24px",
+          textAlign: "center"
+        }}>
+          <div style={{
+            width: 72, height: 72, borderRadius: "50%",
+            background: isError ? "#FEE2E2" : `${TH}18`,
+            color: isError ? "#DC2626" : TH,
+            display: "flex", alignItems: "center", justifyContent: "center",
+            margin: "0 auto 18px",
+            fontSize: 38, fontWeight: 900,
+            boxShadow: isError ? "0 8px 20px rgba(220,38,38,.25)" : `0 8px 20px ${TH}33`
+          }}>{isError ? "!" : "ⓘ"}</div>
+          <div style={{
+            fontSize: 17, fontWeight: 800, color: "#0f172a", lineHeight: 1.55,
+            whiteSpace: "pre-line", marginBottom: 26
+          }}>{popup.message}</div>
+          <button onClick={handleClose} style={{
+            width: "100%", padding: "16px",
+            background: isError ? "#DC2626" : TH, color: "white", border: "none",
+            borderRadius: 14, fontSize: 16, fontWeight: 900, cursor: "pointer",
+            boxShadow: isError ? "0 8px 20px rgba(220,38,38,.45)" : `0 8px 20px ${TH}55`
+          }}>확인</button>
+        </div>
+      </div>
+    );
+  };
+
+  // 우측 상단 컨트롤
+  const TopRight = ({ showSettings = true }) => (
+    <div style={{ position: "absolute", top: 16, right: 16, display: "flex", gap: 10, zIndex: 10 }}>
+      <button onClick={toggleFullscreen} aria-label="전체화면" style={{
+        background: "rgba(255,255,255,0.86)", border: "3px solid rgba(255,255,255,.95)",
+        borderRadius: "50%", width: "clamp(44px, 6.5vw, 58px)", height: "clamp(44px, 6.5vw, 58px)",
+        fontSize: "clamp(17px, 2.6vw, 22px)", display: "flex", alignItems: "center", justifyContent: "center",
+        boxShadow: `0 10px 22px ${TH}30`, cursor: "pointer", backdropFilter: "blur(8px)"
+      }}>⛶</button>
+      {showSettings && (
+        <button onClick={openSettings} aria-label="설정" style={{
+          background: "rgba(255,255,255,0.86)", border: "3px solid rgba(255,255,255,.95)",
+          borderRadius: "50%", width: "clamp(44px, 6.5vw, 58px)", height: "clamp(44px, 6.5vw, 58px)",
+          fontSize: "clamp(19px, 3vw, 26px)", display: "flex", alignItems: "center", justifyContent: "center",
+          boxShadow: `0 10px 22px ${TH}30`, cursor: "pointer", backdropFilter: "blur(8px)"
+        }}>⚙️</button>
+      )}
+    </div>
+  );
+
+  // ───────────────── SETTINGS ─────────────────
+  if (screen === "settings") {
+    const eth = editTheme.value;
+    return (
+      <div style={{ ...FULL, background: "#f8fafc" }}>
+        <div style={{ background: eth, padding: "16px 20px 0", color: "white", flexShrink: 0 }}>
+          <button onClick={() => setScreen("main")} style={{ background: "none", border: "none", color: "rgba(255,255,255,0.85)", fontSize: 14, cursor: "pointer", padding: 0, marginBottom: 8 }}>← 이전</button>
+          <h2 style={{ fontSize: 22, fontWeight: 800, margin: 0 }}>설정</h2>
+          <div style={{ display: "flex", marginTop: 14 }}>
+            {[{ k: "general", l: "⚙️ 일반" }, { k: "class", l: "👥 우리반 관리" }].map(t => (
+              <button key={t.k} onClick={() => setSettingsTab(t.k)} style={{
+                flex: 1, padding: "12px 0", background: "none", border: "none",
+                color: settingsTab === t.k ? "white" : "rgba(255,255,255,0.55)",
+                fontWeight: settingsTab === t.k ? "800" : "500",
+                fontSize: 15, cursor: "pointer",
+                borderBottom: settingsTab === t.k ? "3px solid white" : "3px solid transparent"
+              }}>{t.l}</button>
+            ))}
+          </div>
+        </div>
+
+        <div className="scrollY" style={{ flex: 1, overflowY: "auto", padding: "22px 18px 32px" }}>
+          <div style={{ maxWidth: 720, margin: "0 auto" }}>
+            {settingsTab === "general" ? (
+              <>
+                {/* 은행 이름 */}
+                <section style={{ background: "white", borderRadius: 18, padding: 20, marginBottom: 16, boxShadow: "0 4px 18px rgba(15,23,42,.06)" }}>
+                  <h3 style={{ fontSize: 16, fontWeight: 800, marginBottom: 12, color: "#334155" }}>은행 이름</h3>
+                  <input
+                    value={editSettings.storeName}
+                    onChange={e => setEditSettings(s => ({ ...s, storeName: e.target.value }))}
+                    placeholder="은행 이름"
+                    style={{ width: "100%", padding: 14, border: "2px solid #e2e8f0", borderRadius: 12, fontSize: 16, outline: "none" }}
+                    onFocus={e => e.target.style.borderColor = eth}
+                    onBlur={e => e.target.style.borderColor = "#e2e8f0"}
+                  />
+                </section>
+
+                {/* 테마 컬러 */}
+                <section style={{ background: "white", borderRadius: 18, padding: 20, marginBottom: 16, boxShadow: "0 4px 18px rgba(15,23,42,.06)" }}>
+                  <h3 style={{ fontSize: 16, fontWeight: 800, marginBottom: 4, color: "#334155" }}>테마 색상</h3>
+                  <p style={{ fontSize: 12, color: "#64748b", marginBottom: 14 }}>선택한 색으로 화면 배경과 버튼 색이 함께 바뀝니다</p>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(110px, 1fr))", gap: 12 }}>
+                    {PALETTE.map(c => {
+                      const selected = editSettings.themeColor === c.value;
+                      return (
+                        <button key={c.value} onClick={() => setEditSettings(s => ({ ...s, themeColor: c.value }))} style={{
+                          background: bgOf(c), border: selected ? `3px solid ${c.value}` : "3px solid transparent",
+                          borderRadius: 14, padding: "14px 8px", cursor: "pointer",
+                          display: "flex", flexDirection: "column", alignItems: "center", gap: 8,
+                          boxShadow: selected ? `0 6px 16px ${c.value}55` : "0 2px 8px rgba(15,23,42,.06)",
+                        }}>
+                          <div style={{ width: 36, height: 36, borderRadius: "50%", background: c.value, boxShadow: "0 2px 6px rgba(0,0,0,0.18)" }} />
+                          <span style={{ fontSize: 13, color: "#1f2937", fontWeight: 700 }}>{c.label}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </section>
+              </>
+            ) : (
+              <>
+                {/* 잔고 일괄 입력 */}
+                <section style={{ background: `${eth}10`, borderRadius: 18, padding: 20, marginBottom: 16, border: `2px dashed ${eth}50` }}>
+                  <h3 style={{ fontSize: 15, fontWeight: 800, marginBottom: 10, color: "#334155" }}>💰 잔고 일괄 입력</h3>
+                  <p style={{ fontSize: 12, color: "#64748b", marginBottom: 12 }}>모든 친구의 잔고를 같은 금액으로 설정합니다</p>
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 4, background: "white", borderRadius: 10, padding: "0 14px", border: "1.5px solid #e2e8f0" }}>
+                      <input
+                        type="text" inputMode="numeric"
+                        value={bulkBalance}
+                        onChange={e => setBulkBalance(e.target.value.replace(/[^0-9]/g, ""))}
+                        placeholder="50000"
+                        style={{ flex: 1, padding: "12px 0", border: "none", fontSize: 16, outline: "none", textAlign: "right", background: "transparent" }}
+                      />
+                      <span style={{ fontSize: 14, color: "#475569", fontWeight: 700 }}>원</span>
+                    </div>
+                    <button onClick={applyBulkBalance} disabled={editStudents.length === 0} style={{
+                      padding: "0 18px", background: editStudents.length === 0 ? "#cbd5e1" : eth, color: "white",
+                      border: "none", borderRadius: 10, fontSize: 14, fontWeight: 800,
+                      cursor: editStudents.length === 0 ? "default" : "pointer"
+                    }}>전체 적용</button>
+                  </div>
+                </section>
+
+                {/* 학생 리스트 */}
+                <section style={{ background: "white", borderRadius: 18, padding: 20, marginBottom: 16, boxShadow: "0 4px 18px rgba(15,23,42,.06)" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 12 }}>
+                    <h3 style={{ fontSize: 16, fontWeight: 800, color: "#334155" }}>등록된 친구</h3>
+                    <span style={{ fontSize: 13, color: "#64748b", fontWeight: 700 }}>{editStudents.length}명</span>
+                  </div>
+                  {editStudents.length === 0 ? (
+                    <div style={{ textAlign: "center", padding: "30px 0", color: "#94a3b8" }}>
+                      <div style={{ fontSize: 36, marginBottom: 8 }}>👥</div>
+                      <p style={{ fontSize: 14 }}>등록된 친구가 없어요</p>
+                    </div>
+                  ) : (
+                    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                      {editStudents.map((s, i) => (
+                        <div key={i} style={{ background: "#f8fafc", borderRadius: 12, padding: 14, border: "1.5px solid #e2e8f0" }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+                            <div style={{ flex: 1 }}>
+                              <input
+                                value={s.name}
+                                onChange={e => updateStudent(i, { name: e.target.value })}
+                                placeholder="이름"
+                                style={{ width: "100%", padding: 10, border: "1.5px solid #e2e8f0", borderRadius: 8, fontSize: 15, fontWeight: 700, outline: "none", background: "white" }}
+                                onFocus={e => e.target.style.borderColor = eth}
+                                onBlur={e => e.target.style.borderColor = "#e2e8f0"}
+                              />
+                            </div>
+                            <button onClick={() => removeStudent(i)} style={{ width: 36, height: 36, border: "none", borderRadius: 8, background: "#FEE2E2", color: "#DC2626", cursor: "pointer", fontSize: 16, fontWeight: 800 }}>−</button>
+                          </div>
+                          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                            <div>
+                              <div style={{ fontSize: 11, color: "#64748b", fontWeight: 700, marginBottom: 4 }}>비밀번호 (4자리)</div>
+                              <input
+                                type="text" inputMode="numeric" maxLength={4}
+                                value={s.password}
+                                onChange={e => updateStudent(i, { password: e.target.value.replace(/[^0-9]/g, "").slice(0,4) })}
+                                placeholder="0000"
+                                style={{ width: "100%", padding: 10, border: "1.5px solid #cbd5e1", borderRadius: 8, fontSize: 15, outline: "none", textAlign: "center", letterSpacing: 4, background: "white" }}
+                              />
+                            </div>
+                            <div>
+                              <div style={{ fontSize: 11, color: "#64748b", fontWeight: 700, marginBottom: 4 }}>잔고 (원)</div>
+                              <div style={{ display: "flex", alignItems: "center", gap: 4, background: "white", borderRadius: 8, padding: "0 10px", border: "1.5px solid #cbd5e1" }}>
+                                <input
+                                  type="text" inputMode="numeric"
+                                  value={s.balance}
+                                  onChange={e => {
+                                    const n = parseInt(e.target.value.replace(/[^0-9]/g, ""), 10);
+                                    updateStudent(i, { balance: Number.isFinite(n) ? n : 0 });
+                                  }}
+                                  placeholder="0"
+                                  style={{ flex: 1, padding: "10px 0", border: "none", fontSize: 15, outline: "none", textAlign: "right", background: "transparent" }}
+                                />
+                                <span style={{ fontSize: 12, color: "#475569" }}>원</span>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </section>
+
+                {/* 친구 추가 */}
+                <section style={{ background: `${eth}08`, borderRadius: 18, padding: 20, marginBottom: 16, border: `1.5px dashed ${eth}70` }}>
+                  <h3 style={{ fontSize: 15, fontWeight: 800, color: eth, marginBottom: 14 }}>+ 친구 추가</h3>
+                  <input
+                    value={newStudent.name}
+                    onChange={e => setNewStudent(s => ({ ...s, name: e.target.value }))}
+                    placeholder="이름"
+                    style={{ width: "100%", padding: 12, border: "1.5px solid #e2e8f0", borderRadius: 10, fontSize: 15, marginBottom: 8, outline: "none", background: "white" }}
+                  />
+                  <input
+                    type="text" inputMode="numeric" maxLength={4}
+                    value={newStudent.password}
+                    onChange={e => setNewStudent(s => ({ ...s, password: e.target.value.replace(/[^0-9]/g, "").slice(0,4) }))}
+                    placeholder="비밀번호 4자리 (예: 1234)"
+                    style={{ width: "100%", padding: 12, border: "1.5px solid #e2e8f0", borderRadius: 10, fontSize: 15, marginBottom: 8, outline: "none", background: "white", letterSpacing: 4, textAlign: "center" }}
+                  />
+                  <div style={{ display: "flex", alignItems: "center", gap: 4, background: "white", borderRadius: 10, padding: "0 14px", border: "1.5px solid #e2e8f0", marginBottom: 10 }}>
+                    <input
+                      type="text" inputMode="numeric"
+                      value={newStudent.balance}
+                      onChange={e => setNewStudent(s => ({ ...s, balance: e.target.value.replace(/[^0-9]/g, "") }))}
+                      placeholder="시작 잔고 (예: 50000)"
+                      style={{ flex: 1, padding: "12px 0", border: "none", fontSize: 15, outline: "none", textAlign: "right", background: "transparent" }}
+                    />
+                    <span style={{ fontSize: 13, color: "#475569" }}>원</span>
+                  </div>
+                  <button onClick={addStudent} style={{ width: "100%", padding: 14, background: eth, color: "white", border: "none", borderRadius: 10, fontSize: 15, fontWeight: 800, cursor: "pointer" }}>추가하기</button>
+                </section>
+              </>
+            )}
+
+            <button onClick={saveSettings} style={{
+              background: eth, color: "white", border: "none", borderRadius: 14,
+              padding: 18, fontSize: 17, fontWeight: 800, width: "100%", cursor: "pointer",
+              boxShadow: `0 8px 22px ${eth}55`
+            }}>저장하기</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ───────────────── MAIN ─────────────────
+  if (screen === "main") return (
+    <div style={{ ...FULL, background: BG, position: "relative", overflow: "hidden" }}>
+      <TopRight />
+
+      {/* 상단 헤더 — 꼬망은행 ATM */}
+      <div style={{ flexShrink: 0, padding: "clamp(40px, 7vh, 80px) 80px 0", textAlign: "center", animation: "pop .6s cubic-bezier(0.34, 1.56, 0.64, 1) both" }}>
+        <div style={{
+          fontSize: "clamp(36px, 6.5vw, 80px)",
+          fontWeight: 900, color: TH,
+          letterSpacing: "-2px",
+          textShadow: "0 3px 0 #fff, 0 12px 28px rgba(15,23,42,.12)"
+        }}>
+          <span style={{ marginRight: 14 }}>🏦</span>{settings.storeName}
+        </div>
+      </div>
+
+      {/* 4가지 액션 버튼 */}
+      <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: "30px 24px" }}>
+        <div style={{
+          display: "grid", gridTemplateColumns: "repeat(2, 1fr)",
+          gap: "clamp(14px, 2.5vw, 24px)", width: "100%", maxWidth: 760
+        }}>
+          {[
+            { type: "withdraw", label: "출금", emoji: "💵", desc: "돈 찾기" },
+            { type: "deposit",  label: "입금", emoji: "💰", desc: "돈 넣기" },
+            { type: "transfer", label: "송금", emoji: "📤", desc: "친구에게 보내기" },
+            { type: "inquiry",  label: "조회", emoji: "📋", desc: "잔고 확인" },
+          ].map(b => (
+            <button key={b.type} onClick={() => startTransaction(b.type)} style={{
+              minHeight: 220,
+              background: "white", color: "#0f172a",
+              border: `3px solid ${TH}`,
+              borderRadius: 24, padding: "26px 18px",
+              fontSize: "clamp(28px, 4.2vw, 44px)", fontWeight: 900,
+              cursor: "pointer", boxShadow: `0 12px 28px ${TH}33`,
+              transition: "transform .15s",
+              display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 12
+            }}
+            onMouseDown={e => e.currentTarget.style.transform = "scale(.97)"}
+            onMouseUp={e => e.currentTarget.style.transform = "scale(1)"}
+            onMouseLeave={e => e.currentTarget.style.transform = "scale(1)"}
+            >
+              <span style={{ fontSize: "clamp(58px, 8.5vw, 92px)" }}>{b.emoji}</span>
+              <span style={{ color: TH }}>{b.label}</span>
+              <span style={{ fontSize: "clamp(15px, 1.8vw, 20px)", fontWeight: 700, color: "#64748b" }}>{b.desc}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+      <PopupOverlay />
+    </div>
+  );
+
+  // ───────────────── CARD INSERT ─────────────────
+  if (screen === "card-insert") return (
+    <div style={{ ...FULL, background: BG, position: "relative" }}>
+      <TopRight />
+      <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "40px 24px", textAlign: "center" }}>
+        <div style={{
+          fontSize: "clamp(32px, 5.5vw, 58px)", fontWeight: 900, color: "#0f172a",
+          marginBottom: 10, letterSpacing: "-1.5px", textShadow: "0 2px 0 #fff"
+        }}>
+          카드나 통장을 <span style={{ color: TH }}>넣어 주세요</span>
+        </div>
+        <div style={{ fontSize: 17, color: "#64748b", fontWeight: 700, marginBottom: "clamp(20px, 4vh, 40px)" }}>
+          ⏳ 잠시 후 다음 화면으로 넘어갑니다
+        </div>
+        <InsertVisual direction="down" color={TH} />
+      </div>
+    </div>
+  );
+
+  // ───────────────── PASSWORD ─────────────────
+  if (screen === "password") return (
+    <div style={{ ...FULL, background: BG, position: "relative" }}>
+      <TopRight />
+      <div className="scrollY" style={{ flex: 1, overflowY: "auto", padding: "30px 20px 30px", display: "flex", flexDirection: "column", alignItems: "center" }}>
+        <div style={{ fontSize: "clamp(28px, 4.6vw, 46px)", fontWeight: 900, color: "#0f172a", textAlign: "center", marginBottom: 10, textShadow: "0 2px 0 #fff" }}>
+          비밀번호 <span style={{ color: TH }}>4자리</span>를 눌러 주세요
+        </div>
+        <div style={{ fontSize: 16, color: "#64748b", fontWeight: 700, marginBottom: 30 }}>안전을 위해 화면을 가려 주세요</div>
+
+        {/* 비밀번호 표시 (●●●●) */}
+        <div style={{ display: "flex", gap: 16, marginBottom: 36 }}>
+          {[0,1,2,3].map(i => (
+            <div key={i} style={{
+              width: 64, height: 64, borderRadius: "50%",
+              border: `3px solid ${i < passwordInput.length ? TH : "#cbd5e1"}`,
+              background: i < passwordInput.length ? TH : "white",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              color: "white", fontSize: 32, fontWeight: 900,
+              boxShadow: i < passwordInput.length ? `0 6px 14px ${TH}45` : "none",
+              transition: "all .15s"
+            }}>{i < passwordInput.length ? "●" : ""}</div>
+          ))}
+        </div>
+
+        <Keypad
+          onDigit={onPwdDigit}
+          onClear={onPwdClear}
+          onConfirm={onPwdConfirm}
+          allowConfirm={passwordInput.length === 4}
+          themeColor={TH}
+        />
+        <button onClick={() => { resetTransaction(); setScreen("main"); }} style={{
+          marginTop: 20, background: "transparent", color: "#475569", border: "1.5px solid #cbd5e1",
+          borderRadius: 14, padding: "14px 30px", fontSize: 17, fontWeight: 700, cursor: "pointer"
+        }}>처음으로</button>
+      </div>
+      <PopupOverlay />
+    </div>
+  );
+
+  // ───────────────── FRIEND SELECT (송금) ─────────────────
+  if (screen === "friend-select") {
+    return (
+      <div style={{ ...FULL, background: BG, position: "relative" }}>
+        <TopRight />
+        <div style={{ flex: 1, display: "flex", flexDirection: "column", padding: "40px 20px 30px", overflow: "hidden", minHeight: 0 }}>
+          <div style={{ textAlign: "center", marginBottom: "clamp(20px, 3vh, 36px)" }}>
+            <div style={{ fontSize: "clamp(32px, 5.2vw, 52px)", fontWeight: 900, color: "#0f172a", letterSpacing: "-1.5px", textShadow: "0 2px 0 #fff" }}>
+              송금할 <span style={{ color: TH }}>친구의 이름</span>을 눌러 주세요
+            </div>
+          </div>
+          <div className="scrollY" style={{ flex: 1, overflowY: "auto", minHeight: 0 }}>
+            <div style={{ maxWidth: 760, margin: "0 auto", width: "100%", display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: "clamp(10px, 1.6vw, 16px)" }}>
+              {students.map((s, idx) => {
+                // 이름별로 살짝 다른 톤 (인덱스 기반)
+                const avatarBg = `linear-gradient(135deg, ${TH} 0%, ${TH_DARK} 100%)`;
+                return (
+                  <button key={s.password} onClick={() => { setTargetStudent(s); setScreen("amount-select"); }} style={{
+                    background: "white", border: `3px solid ${TH}`,
+                    borderRadius: 18, padding: "clamp(20px, 2.4vh, 26px) 12px",
+                    cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 10,
+                    boxShadow: `0 8px 20px ${TH}26`, transition: "transform .15s"
+                  }}
+                  onMouseDown={e => e.currentTarget.style.transform = "scale(.97)"}
+                  onMouseUp={e => e.currentTarget.style.transform = "scale(1)"}
+                  onMouseLeave={e => e.currentTarget.style.transform = "scale(1)"}
+                  >
+                    <div style={{
+                      width: "clamp(70px, 11vw, 96px)", height: "clamp(70px, 11vw, 96px)",
+                      borderRadius: "50%",
+                      background: avatarBg,
+                      color: "white",
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      fontSize: "clamp(34px, 5vw, 46px)", fontWeight: 900,
+                      boxShadow: `0 8px 20px ${TH}55`,
+                      border: "3px solid white",
+                      letterSpacing: "-1px"
+                    }}>{s.name.charAt(0)}</div>
+                    <span style={{ fontSize: "clamp(22px, 3vw, 32px)", fontWeight: 900, color: "#0f172a" }}>{s.name}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+          <div style={{ flexShrink: 0, padding: "16px 0 0", textAlign: "center" }}>
+            <button onClick={() => { resetTransaction(); setScreen("main"); }} style={{
+              background: "transparent", color: "#475569", border: "1.5px solid #cbd5e1",
+              borderRadius: 14, padding: "14px 30px", fontSize: 17, fontWeight: 700, cursor: "pointer"
+            }}>처음으로</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ───────────────── AMOUNT SELECT ─────────────────
+  if (screen === "amount-select") {
+    const presets = [5000, 10000, 30000, 50000, 100000];
+    return (
+      <div style={{ ...FULL, background: BG, position: "relative" }}>
+        <TopRight />
+        <div className="scrollY" style={{ flex: 1, overflowY: "auto", padding: "30px 20px 30px" }}>
+          <div style={{ maxWidth: 760, margin: "0 auto" }}>
+            <div style={{ textAlign: "center", marginBottom: 8 }}>
+              <div style={{ fontSize: 17, color: TH, fontWeight: 800, marginBottom: 6 }}>
+                {transactionType === "withdraw" ? "💵 출금" : transactionType === "deposit" ? "💰 입금" : "📤 송금"}
+                {targetStudent && ` · ${targetStudent.name}님께`}
+              </div>
+              <div style={{ fontSize: "clamp(30px, 5vw, 48px)", fontWeight: 900, color: "#0f172a", letterSpacing: "-1.5px", textShadow: "0 2px 0 #fff" }}>
+                얼만큼 <span style={{ color: TH }}>{transactionType === "deposit" ? "입금" : transactionType === "transfer" ? "송금" : "출금"}</span>할까요?
+              </div>
+            </div>
+            {currentStudent && transactionType !== "transfer" && (
+              <div style={{ textAlign: "center", marginBottom: 18, padding: "10px 18px", background: "white", borderRadius: 999, display: "inline-block", border: `1.5px solid ${TH}30`, marginLeft: "50%", transform: "translateX(-50%)" }}>
+                <span style={{ fontSize: 16, color: "#64748b", marginRight: 6 }}>현재 잔고</span>
+                <span style={{ fontSize: 18, fontWeight: 900, color: TH }}>{fmtMoney(currentStudent.balance)}</span>
+              </div>
+            )}
+
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "clamp(12px, 1.8vw, 18px)", marginBottom: 16, marginTop: 18 }}>
+              {presets.map(p => (
+                <button key={p} onClick={() => selectAmount(p)} style={{
+                  background: "white", border: `3px solid ${TH}`,
+                  borderRadius: 20, padding: "clamp(28px, 3.6vh, 40px) 12px",
+                  cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 2,
+                  boxShadow: `0 6px 18px ${TH}26`, transition: "transform .15s"
+                }}
+                onMouseDown={e => e.currentTarget.style.transform = "scale(.97)"}
+                onMouseUp={e => e.currentTarget.style.transform = "scale(1)"}
+                onMouseLeave={e => e.currentTarget.style.transform = "scale(1)"}
+                >
+                  <span style={{ fontSize: "clamp(30px, 4vw, 44px)", fontWeight: 900, color: TH, lineHeight: 1 }}>{p < 10000 ? `${p/1000}` : `${p/10000}`}<span style={{ fontSize: "0.55em" }}>{p < 10000 ? "천원" : "만원"}</span></span>
+                </button>
+              ))}
+            </div>
+
+            <button onClick={() => { setCustomAmount(""); setScreen("custom-amount"); }} style={{
+              width: "100%",
+              background: `linear-gradient(135deg, ${TH} 0%, ${TH_DARK} 100%)`,
+              color: "white", border: "none",
+              borderRadius: 20, padding: "clamp(26px, 3.4vh, 36px)",
+              fontSize: "clamp(26px, 3.6vw, 36px)", fontWeight: 900,
+              cursor: "pointer",
+              boxShadow: `0 10px 24px ${TH}55, inset 0 -3px 0 rgba(0,0,0,0.15)`,
+              letterSpacing: 2,
+              display: "flex", alignItems: "center", justifyContent: "center", gap: 14
+            }}>
+              <span style={{ fontSize: "1.2em" }}>✏️</span>
+              직접 입력
+            </button>
+          </div>
+        </div>
+        <div style={{ position: "absolute", left: 24, bottom: "clamp(20px, 4vh, 36px)" }}>
+          <button onClick={() => { resetTransaction(); setScreen("main"); }} style={{
+            background: "white", color: "#475569", border: "2px solid #e2e8f0",
+            borderRadius: 14, padding: "12px 22px", fontSize: 15, fontWeight: 800, cursor: "pointer"
+          }}>처음으로</button>
+        </div>
+      </div>
+    );
+  }
+
+  // ───────────────── CUSTOM AMOUNT INPUT ─────────────────
+  if (screen === "custom-amount") {
+    const n = parseInt(customAmount || "0", 10);
+    const allow = n >= 1000 && n % 1000 === 0;
+    return (
+      <div style={{ ...FULL, background: BG, position: "relative" }}>
+        <TopRight />
+        <div className="scrollY" style={{ flex: 1, overflowY: "auto", padding: "30px 20px 30px", display: "flex", flexDirection: "column", alignItems: "center" }}>
+          <div style={{ fontSize: "clamp(28px, 4.6vw, 46px)", fontWeight: 900, color: "#0f172a", textAlign: "center", marginBottom: 10, textShadow: "0 2px 0 #fff" }}>
+            금액을 직접 입력해 주세요
+          </div>
+          <div style={{ fontSize: 16, color: "#64748b", fontWeight: 700, marginBottom: 24 }}>천원 단위로만 입력 가능 (동전 단위 불가)</div>
+
+          {/* 금액 표시 */}
+          <div style={{
+            background: "white", border: `3px solid ${TH}`, borderRadius: 22,
+            padding: "26px 30px", marginBottom: 32, minWidth: 300, maxWidth: 500, width: "100%",
+            textAlign: "right",
+            boxShadow: `0 6px 18px ${TH}33`
+          }}>
+            <div style={{ fontSize: 15, color: "#64748b", fontWeight: 700, marginBottom: 6 }}>입력 금액</div>
+            <div style={{
+              fontSize: "clamp(36px, 5.6vw, 54px)", fontWeight: 900, color: TH,
+              letterSpacing: -1.5
+            }}>{fmtMoney(n)}</div>
+          </div>
+
+          <Keypad
+            onDigit={onAmountDigit}
+            onClear={onAmountClear}
+            onConfirm={onAmountConfirm}
+            allowConfirm={n > 0}
+            themeColor={TH}
+          />
+          <button onClick={() => setScreen("amount-select")} style={{
+            marginTop: 20, background: "transparent", color: "#475569", border: "1.5px solid #cbd5e1",
+            borderRadius: 14, padding: "14px 30px", fontSize: 17, fontWeight: 700, cursor: "pointer"
+          }}>← 이전</button>
+        </div>
+        <PopupOverlay />
+      </div>
+    );
+  }
+
+  // ───────────────── CONFIRM AMOUNT ─────────────────
+  if (screen === "confirm-amount") {
+    // transfer 일 때 currentStudent === null 이면 비밀번호부터 받기
+    const needPassword = transactionType === "transfer" && currentStudent === null;
+    return (
+      <div style={{ ...FULL, background: BG, position: "relative" }}>
+        <TopRight />
+        <div className="scrollY" style={{ flex: 1, overflowY: "auto", padding: "30px 20px 30px", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
+          <div style={{ textAlign: "center", marginBottom: 28 }}>
+            <div style={{ fontSize: 17, color: TH, fontWeight: 800, marginBottom: 8 }}>
+              {transactionType === "withdraw" ? "💵 출금" : transactionType === "deposit" ? "💰 입금" : "📤 송금"}
+              {targetStudent && ` · ${targetStudent.name}님께`}
+            </div>
+            <div style={{ fontSize: "clamp(30px, 5vw, 46px)", fontWeight: 900, color: "#0f172a", letterSpacing: "-1.5px", textShadow: "0 2px 0 #fff" }}>
+              <span style={{ color: TH }}>금액을 확인</span>해 주세요
+            </div>
+          </div>
+
+          <div style={{
+            background: "white", border: `4px solid ${TH}`, borderRadius: 28,
+            padding: "40px 48px", marginBottom: 36, minWidth: 300, maxWidth: 560, width: "92%",
+            textAlign: "center", boxShadow: `0 14px 32px ${TH}40`,
+            animation: "pop .4s cubic-bezier(0.34, 1.56, 0.64, 1) both"
+          }}>
+            <div style={{
+              fontSize: "clamp(50px, 8vw, 80px)", fontWeight: 900, color: TH,
+              letterSpacing: -2.5, lineHeight: 1.1
+            }}>{fmtMoney(amount)}</div>
+          </div>
+
+          <div style={{ display: "flex", gap: 14, width: "100%", maxWidth: 500 }}>
+            <button onClick={() => setScreen(transactionType === "transfer" ? "amount-select" : "amount-select")} style={{
+              flex: 1, background: "white", color: "#475569", border: "2px solid #e2e8f0",
+              borderRadius: 18, padding: "20px", fontSize: 20, fontWeight: 800, cursor: "pointer"
+            }}>← 다시</button>
+            <button onClick={needPassword ? () => setScreen("password") : confirmAndProceed} style={{
+              flex: 2, background: `linear-gradient(135deg, ${TH} 0%, ${TH_DARK} 100%)`, color: "white", border: "none",
+              borderRadius: 18, padding: "20px", fontSize: 22, fontWeight: 900, cursor: "pointer",
+              boxShadow: `0 10px 24px ${TH}55`
+            }}>{needPassword ? "비밀번호 입력" : "확인"}</button>
+          </div>
+        </div>
+        <PopupOverlay />
+      </div>
+    );
+  }
+
+  // ───────────────── DEPOSIT CASH (현금 투입) ─────────────────
+  if (screen === "deposit-cash") return (
+    <div style={{ ...FULL, background: BG, position: "relative" }}>
+      <TopRight />
+      <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "30px 20px" }}>
+        <div style={{ fontSize: "clamp(30px, 5vw, 50px)", fontWeight: 900, color: "#0f172a", marginBottom: 10, textAlign: "center", textShadow: "0 2px 0 #fff" }}>
+          현금 <span style={{ color: TH }}>{fmtMoney(amount)}</span>을 넣어 주세요
+        </div>
+        <div style={{ fontSize: 17, color: "#64748b", fontWeight: 700, marginBottom: 28 }}>⏳ 잠시 후 다음 화면으로 넘어갑니다</div>
+        <CashVisual direction="in" />
+      </div>
+    </div>
+  );
+
+  // ───────────────── PROCESSING ─────────────────
+  if (screen === "processing") return (
+    <div style={{ ...FULL, background: BG, alignItems: "center", justifyContent: "center", padding: 24 }}>
+      <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", textAlign: "center" }}>
+        <div style={{ width: 140, height: 140, borderRadius: "50%", background: TH, display: "flex", alignItems: "center", justifyContent: "center", boxShadow: `0 14px 36px ${TH}55`, marginBottom: 28, animation: "pop .5s cubic-bezier(0.34, 1.56, 0.64, 1) both" }}>
+          <span style={{ fontSize: 70 }}>⏳</span>
+        </div>
+        <div style={{ fontSize: "clamp(28px, 4.4vw, 42px)", fontWeight: 900, color: TH, marginBottom: 10 }}>잠시만 기다려 주세요</div>
+        <div style={{ color: "#475569", fontSize: 18, fontWeight: 700, marginBottom: 28 }}>처리 중입니다...</div>
+        <div style={{ display: "flex", gap: 12 }}>
+          {[0,1,2].map(i => (
+            <div key={i} style={{ width: 18, height: 18, borderRadius: "50%", background: TH, animation: `dotPulse 1.4s ease-in-out ${i * 0.28}s infinite` }} />
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+
+  // ───────────────── TAKE CARD ─────────────────
+  if (screen === "take-card") return (
+    <div style={{ ...FULL, background: BG, position: "relative" }}>
+      <TopRight />
+      <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "30px 20px" }}>
+        <div style={{ fontSize: "clamp(30px, 5.2vw, 52px)", fontWeight: 900, color: "#0f172a", marginBottom: 10, textAlign: "center", textShadow: "0 2px 0 #fff" }}>
+          카드나 통장을 <span style={{ color: TH }}>가져가 주세요</span>
+        </div>
+        <div style={{ fontSize: 17, color: "#64748b", fontWeight: 700, marginBottom: 28 }}>⏳ 잠시 후 다음 화면으로 넘어갑니다</div>
+        <InsertVisual direction="up" color={TH} />
+      </div>
+    </div>
+  );
+
+  // ───────────────── TAKE CASH (출금) ─────────────────
+  if (screen === "take-cash") return (
+    <div style={{ ...FULL, background: BG, position: "relative" }}>
+      <TopRight />
+      <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "30px 20px", textAlign: "center" }}>
+        <div style={{ fontSize: "clamp(28px, 4.8vw, 44px)", fontWeight: 900, color: "#0f172a", marginBottom: 8, textShadow: "0 2px 0 #fff", lineHeight: 1.4 }}>
+          현금 <span style={{ color: TH }}>{fmtMoney(amount)}</span>을 확인해 주시고
+        </div>
+        <div style={{ fontSize: "clamp(22px, 3.6vw, 32px)", fontWeight: 800, color: "#334155", marginBottom: 26, textShadow: "0 2px 0 #fff" }}>
+          놓고 가시는 물건이 없는지 확인해 주세요
+        </div>
+        <CashVisual direction="out" />
+      </div>
+    </div>
+  );
+
+  // ───────────────── INQUIRY RESULT ─────────────────
+  if (screen === "inquiry-result") return (
+    <div style={{ ...FULL, background: BG, position: "relative" }}>
+      <TopRight />
+      <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "30px 20px" }}>
+        <div style={{ textAlign: "center", marginBottom: 28 }}>
+          <div style={{ fontSize: 17, color: TH, fontWeight: 800, marginBottom: 8 }}>📋 잔고 조회</div>
+          <div style={{ fontSize: "clamp(28px, 4.4vw, 40px)", fontWeight: 900, color: "#0f172a", textShadow: "0 2px 0 #fff" }}>
+            <span style={{ color: TH }}>{currentStudent?.name}</span>님의 잔고
+          </div>
+        </div>
+        <div style={{
+          background: "white", border: `4px solid ${TH}`, borderRadius: 32,
+          padding: "52px 60px", marginBottom: 36, minWidth: 300, maxWidth: 600, width: "94%",
+          textAlign: "center", boxShadow: `0 16px 36px ${TH}45`,
+          animation: "pop .5s cubic-bezier(0.34, 1.56, 0.64, 1) both"
+        }}>
+          <div style={{ fontSize: "clamp(54px, 9vw, 92px)", fontWeight: 900, color: TH, letterSpacing: -2.5 }}>{fmtMoney(currentStudent?.balance || 0)}</div>
+        </div>
+        <button onClick={() => setScreen("take-card")} style={{
+          background: `linear-gradient(135deg, ${TH} 0%, ${TH_DARK} 100%)`,
+          color: "white", border: "none", borderRadius: 18,
+          padding: "20px 72px", fontSize: 22, fontWeight: 900, cursor: "pointer",
+          boxShadow: `0 10px 24px ${TH}55`
+        }}>확인</button>
+      </div>
+    </div>
+  );
+
+  // ───────────────── THANKS ─────────────────
+  if (screen === "thanks") return (
+    <div style={{ ...FULL, background: BG, alignItems: "center", justifyContent: "center", padding: 24 }}>
+      <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", textAlign: "center" }}>
+        <div style={{
+          width: "clamp(100px, 14vw, 140px)", height: "clamp(100px, 14vw, 140px)",
+          borderRadius: "50%", background: TH, color: "white",
+          fontSize: "clamp(50px, 7vw, 72px)", fontWeight: 900,
+          display: "flex", alignItems: "center", justifyContent: "center",
+          boxShadow: `0 14px 36px ${TH}55`, marginBottom: 34,
+          animation: "pop .5s cubic-bezier(0.34, 1.56, 0.64, 1) both"
+        }}>✓</div>
+        <div style={{ fontSize: "clamp(40px, 6.6vw, 72px)", fontWeight: 900, color: TH, marginBottom: 18, letterSpacing: "-2px", textShadow: "0 2px 0 #fff" }}>
+          이용해 주셔서 감사합니다
+        </div>
+        <div style={{ fontSize: 17, color: "#94a3b8", marginTop: 18, fontWeight: 600 }}>잠시 후 메인 화면으로 돌아갑니다</div>
+      </div>
+    </div>
+  );
+
+  return null;
+}
+
+const root = ReactDOM.createRoot(document.getElementById("root"));
+root.render(<AtmKiosk />);
+  </script>
+</body>
+</html>
