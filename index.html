@@ -42,7 +42,7 @@
       </div>
     </div>
   </div>
-  <script type="text/babel" data-presets="react">
+  <script type="text/plain" id="kioskJsx">
 const { useState, useEffect, useRef } = React;
 
 // ─── 테마 6색 ───
@@ -1277,6 +1277,29 @@ function AtmKiosk() {
 
 const root = ReactDOM.createRoot(document.getElementById("root"));
 root.render(<AtmKiosk />);
+  </script>
+  <script>
+    (function () {
+      function waitForBabel(cb) {
+        if (window.Babel && window.React && window.ReactDOM) cb();
+        else setTimeout(function () { waitForBabel(cb); }, 50);
+      }
+      waitForBabel(function () {
+        try {
+          var code = document.getElementById("kioskJsx").textContent;
+          var out = Babel.transform(code, {
+            presets: [["react", { runtime: "classic" }]]
+          });
+          new Function(out.code)();
+        } catch (e) {
+          document.getElementById("root").innerHTML =
+            '<div style="padding:40px;font-family:sans-serif;color:#dc2626;text-align:center;">' +
+            '<h2>로딩 오류</h2><pre style="text-align:left;white-space:pre-wrap;">' +
+            String(e) + '</pre></div>';
+          console.error(e);
+        }
+      });
+    })();
   </script>
 </body>
 </html>
