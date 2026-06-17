@@ -794,7 +794,14 @@ function AtmKiosk() {
 
                 {/* 친구 추가 */}
                 <section style={{ background: `${eth}08`, borderRadius: 18, padding: 20, marginBottom: 16, border: `1.5px dashed ${eth}70` }}>
-                  <h3 style={{ fontSize: 15, fontWeight: 800, color: eth, marginBottom: 14 }}>+ 친구 추가</h3>
+                  <h3 style={{ fontSize: 15, fontWeight: 800, color: eth, marginBottom: 10 }}>+ 친구 추가</h3>
+                  <div style={{ background: "#FEF3C7", border: "1.5px solid #FCD34D", borderRadius: 10, padding: "10px 12px", marginBottom: 14, display: "flex", gap: 8, alignItems: "flex-start" }}>
+                    <span style={{ fontSize: 18, lineHeight: 1, flexShrink: 0 }}>⚠️</span>
+                    <span style={{ fontSize: 12.5, color: "#78350F", fontWeight: 700, lineHeight: 1.5 }}>
+                      동일한 비밀번호 사용 시 원아 구분이 되지 않습니다.<br />
+                      원아별로 다른 비밀번호를 설정해 주세요.
+                    </span>
+                  </div>
                   <input
                     value={newStudent.name}
                     onChange={e => setNewStudent(s => ({ ...s, name: e.target.value }))}
@@ -1017,7 +1024,7 @@ function AtmKiosk() {
                 {targetStudent && ` · ${targetStudent.name}님께`}
               </div>
               <div style={{ fontSize: "clamp(30px, 5vw, 48px)", fontWeight: 900, color: "#0f172a", letterSpacing: "-1.5px", textShadow: "0 2px 0 #fff" }}>
-                얼만큼 <span style={{ color: TH }}>{transactionType === "deposit" ? "입금" : transactionType === "transfer" ? "송금" : "출금"}</span>할까요?
+                얼마큼 <span style={{ color: TH }}>{transactionType === "deposit" ? "입금" : transactionType === "transfer" ? "송금" : "출금"}</span>할까요?
               </div>
             </div>
             {currentStudent && transactionType !== "transfer" && (
